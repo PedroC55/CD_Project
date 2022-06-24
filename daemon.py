@@ -33,3 +33,19 @@ class Daemon(threading.Thread):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.connect((self.host, self.port))
         print("Conected to " + self.host + ":" + self.port)
+
+    def send(self, address, msg):
+        """ Send msg to address. """
+        payload = pickle.dumps(msg)
+        self.socket.sendto(payload, address)
+
+    def recv(self):
+        """ Retrieve msg payload and from address."""
+        try:
+            payload, addr = self.socket.recvfrom(1024)
+        except socket.timeout:
+            return None, None
+
+        if len(payload) == 0:
+            return None, addr
+        return payload, addr
