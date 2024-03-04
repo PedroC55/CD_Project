@@ -1,0 +1,255 @@
+openapi: 3.0.3
+info:
+  title: Distributed Music Editor  - Advanced Sound Systems
+  description: |-
+    A firma Advanced Sound Systems (ASS) encontra-se a desenvolver uma aplicação de karaoke para músicos. Esta aplicação distingue-se por não só remover a voz das músicas, mas também remover instrumentos individuais, permitindo a um músico substituir a performance do músico original pela sua. Este novo serviço será disponibilizado online através de um portal web em que o músico pode fazer upload de um ficheiro de música, analisar os instrumentos que compõem a música, selecionar vários instrumentos e finalmente receber um ficheiro novo em que a música contém apenas esses instrumentos.
+    
+    A tarefa de separar uma música em várias pistas por instrumento é intensiva do ponto de vista de processamento pelo que a ASS contratou os alunos de Computação Distribuída para desenvolver um serviço online capaz de atender às necessidades da empresa com uma qualidade de experiência elevada para o utilizador final (identificação rápida dos instrumentos e construção do novo ficheiro sem o(s) instrumento(s) seleccionados). 
+    
+    Para esta tarefa deverão desenvolver todo o código necessário para a criação de um serviço Web que possa servir em paralelo múltiplos clientes de forma rápida e eficiente recorrendo a computação paralela (aqui conseguido através de paralelização em múltiplos processos/workers independentes que podem estar no mesmo computador ou não).
+
+  version: 1.0.0
+externalDocs:
+  description: Find out more about Swagger
+  url: http://swagger.io
+tags:
+  - name: music
+    description: Processamento de Musicas
+  - name: system
+    description: Informação sobre o sistema
+paths:
+  /music:
+    post:
+      tags:
+        - music
+      summary: Adicionar nova música
+      description: Submeter ficheiros de áudio em formato MP3. Em resposta à submissão do ficheiro de áudio, o serviço deverá retornar um ficheiro JSON contendo um identificador do trabalho (music_id), e uma lista de identificadores das pistas de instrumentos (cada identificador deverá corresponder a um instrumento). Este método apenas armaneza e analisa os metadados da música.
+      operationId: submit
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Musica'
+        '405':
+          description: Invalid input
+    get:
+      tags:
+        - music
+      summary: Listar todas as músicas submetidas
+      description: Listar todas as músicas submetidas
+      operationId: listAll
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Musica'
+  /music/{music_id}:
+    post:
+      tags:
+        - music
+      summary: Processar uma musica
+      description: Requisitar o processamento asincrono (este método deve retornar imediatamente) da música <music_id> com apenas os instrumentos listados através do seu identificador num ficheiro JSON submetido. O sistema deve fazer a separação da música nos seus vários instrumentos, dando origem a um ficheiro por instrumento. No final, o sistema deverá misturar os instrumentos seleccionados num unico ficheiro.
+      operationId: process
+      parameters:
+        - name: music_id
+          in: path
+          description: ID da musica a procesar
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: integer
+              example: [1,2,3,5]
+      responses:
+        '200':
+          description: successful operation
+        '404':
+          description: Music not found
+        '405':
+          description: Track not found
+    get:
+      tags:
+        - music
+      summary: Estado de processamento de uma musica
+      description: Requisitar o estado de processamento de uma música, quando o estado é 100% a resposta deve incluir o url do ficheiro final. Quando a pista de um instrumento estiver completo deverá retornar o link para o ficheiro de cada instrumento (permitindo ao utilizador fazer o download e reprodução do ficheiro). No final haverá também um link para o ficheiro final misturado (contendo os instrumentos seleccionados).
+      operationId: progress
+      parameters:
+        - name: music_id
+          in: path
+          description: ID da musica a procesar
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Progress'
+        '404':
+          description: Music not found
+
+  /job:
+    get:
+      tags:
+        - system
+      summary: Listar todos Jobs
+      description: Listar todos Jobs (Job é uma tarefa distribuída a um worker) submetidos 
+      operationId: jobs
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: integer
+                example: [3133121,3164892,3313176]
+        '405':
+          description: Invalid input
+  /job/{job_id}:
+    get:
+      tags:
+        - system
+      summary: Informação sobre um Job
+      description: estatísticas de um dado Job (tamanho do ficheiro, link para os vários ficheiros, tempos de processamento, music_id, etc.)
+      operationId: job_stats
+      parameters:
+        - name: job_id
+          in: path
+          description: ID do JOB
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '404':
+          description: Job not found
+  /reset:
+    post:
+      tags:
+        - system
+      summary: Reiniciar o sistema
+      description: Apagar todos ficheiros temporários e músicas (sistema limpo), cancelar todos os workers ainda em funcionamento.
+      operationId: reset
+      responses:
+        '200':
+          description: successful operation
+
+components:
+  schemas:
+    Musica:
+      type: object
+      properties:
+        music_id:
+          type: integer
+          format: int64
+          example: 123345678
+        name:
+          type: string
+          example: "Another One Bites the Dust"
+        band:
+          type: string
+          example: "Queen"
+        tracks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Track'
+      xml:
+        name: musica
+    Track:
+      type: object
+      properties:
+        name:
+          type: string
+          example: drums
+        track_id:
+          type: integer
+          format: int64
+          example: 1
+    Instrument:
+      type: object
+      properties:
+        name:
+          type: string
+          example: guitar
+        track:
+          type: string
+          format: uri
+          example: http://localhost/file/12314
+    Progress:
+      type: object
+      properties:
+        progress:
+          type: integer
+        instruments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Instrument'
+          example: [{'name': 'guitar', 'track': 'http://localhost/file/12314'}, {'name': 'bass', 'track': 'http://localhost/file/34567'}
+            ]
+        final:
+          type: string
+          format: uri
+          example: http://localhost/file/31231234
+
+    Job:
+      type: object
+      properties:
+        job_id:
+          type: integer
+          format: int64
+          example: 1334
+        size:
+          type: integer
+          description: in bytes
+          example: 1048576
+        time:
+          type: integer
+          format: timestamp
+          description: in seconds
+          example: 12312
+        music_id:
+          type: integer
+          format: int64
+          description: Id da musica que deu origem a este job
+        track_id:
+          oneOf:
+          - type: integer
+            format: int64
+            description: Id da track processada pelo job
+            example: 3164892
+          - type: array
+            items:
+              type: integer
+            example: [3133121,3164892,3313176]
+
+

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+<head> <title>Music Processing Web Page</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <style>
+        .highlight {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h1>Music Processing</h1>
+
+    <form id="uploadForm" enctype="multipart/form-data">
+        <label for="file">Upload Music:</label>
+        <input type="file" name="file" id="file" required>
+        <br>
+        <label for="band">Band:</label>
+        <input type="text" name="band" id="band" required>
+        <br>
+        <button type="submit">Submit</button>
+    </form>
+
+    <h2>Submitted Musics:</h2>
+    <ul id="musicList"></ul>
+
+    <h2>Job List:</h2>
+    <ul id="jobList"></ul>
+    <button id="getJobsButton" onclick="getJobs()">Update Music List</button>
+
+    <button id="reset" onclick="resetSystem()">Reset</button>
+
+    <script>
+        $(document).ready(function () {
+            getMusics();
+            getJobs();
+        });
+
+        $("#musicList").on("click", ".musicItem span", function () {
+            var musicId = $(this).parent().data("musicId");
+            if (musicId != undefined) {
+                getMusicFinal(musicId);
+            }
+        });
+
+
+        $("#uploadForm").submit(function (event) {
+            event.preventDefault();
+
+            var formData = new FormData(this);
+
+            $.ajax({
+                url: "/music",
+                type: "POST",
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (data) {
+                    var musicItem = $("<li>").data("musicId", data.music_id)
+                                             .addClass("musicItem")
+                                             .attr('id', 'musicId-' + data.music_id);
+
+                    var musicText = $("<span>")
+                                    .text("{" + data.music_id + "}: " + data.name + " - " + data.band)
+                                    .hover(function () {
+                                        $(this).addClass("highlight");
+                                    },  
+                                    function () {
+                                        $(this).removeClass("highlight");
+                                    });
+
+                    musicItem.append(musicText);
+                    $("#musicList").append(musicItem);
+
+                    var tracks = data.tracks;
+                    if (Object.keys(tracks).length > 0) {
+                      var tracksList = $("<select>").attr("id", "tracksSelect" + data.music_id).attr("multiple", "multiple");
+                      for (const [trackId, trackName] of Object.entries(tracks)) {
+                        var trackItem = $("<option>").val(trackId).text("{" + trackId + "}: " + trackName);
+                        tracksList.append(trackItem);
+                      }
+                      musicItem.append(tracksList);
+                    }
+
+                    var processButton = $("<button>")
+                      .text("Process")
+                      .addClass("processButton")
+                      .click(function () {
+                          var selectedTracks = $("#tracksSelect" + data.music_id).val();
+                          if (selectedTracks && selectedTracks.length < Object.keys(tracks).length) {
+                              processMusic(data.music_id, selectedTracks);
+                          } else {
+                              alert("You can't remove all tracks.");
+                          }
+                          });
+                    musicItem.append(processButton);
+
+                },
+                error: function (xhr, status, error) {
+                    console.log("Error:", error);
+                }
+            });
+        });
+
+        function resetSystem() {
+            $.ajax({
+                url: "/reset",
+                type: "POST",
+                success: function () { },
+                error: function (xhr, status, error) {
+                    console.log("Error:", error);
+                }
+            });
+        }
+
+        function getMusics() {
+            $.ajax({
+                url: "/music",
+                type: "GET",
+                success: function (data) {
+                    $("#musicList").empty();
+                    data.forEach(function (music) {
+                        var musicItem = $("<li>").data("musicId", music.music_id)
+                                                 .addClass("musicItem").attr('id', 'musicId-' + music.music_id);
+
+                        var musicText = $("<span>")
+                                        .text("{" + music.music_id + "}: " + music.name + " - " + music.band)
+                                        .hover(function () {
+                                            $(this).addClass("highlight");
+                                        },  
+                                        function () {
+                                            $(this).removeClass("highlight");
+                                        });
+
+                        musicItem.append(musicText);
+                        $("#musicList").append(musicItem);
+
+                        var tracks = music.tracks;
+                        if (Object.keys(tracks).length > 0) {
+                          var tracksList = $("<select>").attr("id", "tracksSelect" + music.music_id).attr("multiple", "multiple");
+                          for (const [trackId, trackName] of Object.entries(tracks)) {
+                            var trackItem = $("<option>").val(trackId).text("{" + trackId + "}: " + trackName);
+                            tracksList.append(trackItem);
+                          }
+                          musicItem.append(tracksList);
+                        }
+
+                        var processButton = $("<button>")
+                          .text("Process")
+                          .addClass("processButton")
+                          .click(function () {
+                              var selectedTracks = $("#tracksSelect" + music.music_id).val();
+                              if (selectedTracks && selectedTracks.length < Object.keys(tracks).length) {
+                                  processMusic(music.music_id, selectedTracks);
+                              } else {
+                                  alert("You can't remove all tracks.");
+                              }
+                              });
+                        musicItem.append(processButton);
+                    });
+                },
+                error: function (xhr, status, error) {
+                    console.log("Error:", error);
+                }
+            });
+        }
+
+        function processMusic(musicId, selectedTracks) {
+            $.ajax({
+                url: "/music/" + musicId,
+                type: "POST",
+                data: JSON.stringify({ tracks: selectedTracks }),
+                contentType: "application/json",
+                success: function (data) {
+                    console.log("Processing music with ID " + musicId);
+                },
+                error: function (xhr, status, error) {
+                    console.log("Error:", error);
+                }
+            });
+        }
+
+        function getMusicFinal(musicId) {
+            $.ajax({
+                url: "/music/" + musicId,
+                type: "GET",
+                success: function (data) {
+                    if (data.final) {
+                        var finalButton = $("<button>")
+                            .text("Download Final Music")
+                            .addClass("downloadButton")
+                            .click(function () {
+                                downloadTrack(data.final);
+                            });
+
+                        // Append button to music item
+                        $("#musicId-" + musicId).append(finalButton);
+
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.log("Error:", error);
+                }
+            });
+        }
+
+        function downloadTrack(trackUrl) {
+            window.location.href = trackUrl;
+        }
+
+        function getJobs() {
+            $.ajax({
+                url: "/job",
+                type: "GET",
+                success: function (data) {
+                    $("#jobList").empty();
+
+                    if (typeof data === "object" && data !== null) {
+                        Object.keys(data).forEach(function (key) {
+                            var job = data[key];
+                            var jobItem = $("<li>").text(
+                                                        "{ job_id: " + job.job_id + ", size: " + job.size
+                                                         + ", time: " + job.time
+                                                         + ", music_id: " + job.music_id
+                                                         + ", track_id: " + job.track_id + " }"
+                                                        );
+                            $("#jobList").append(jobItem);
+                        });
+                    } else {
+                        console.log("Error: Invalid data format");
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.log("Error:", error);
+                }
+            });
+        }
+    </script>
+</body>
+</html>
